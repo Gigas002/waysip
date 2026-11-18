@@ -3,7 +3,7 @@
 use std::io::{IsTerminal, Read};
 
 use crate::cli::Cli;
-use libwaysip::{AreaInfo, BoxInfo, Color, SelectionType, WaySip};
+use libwaysip::{AreaInfo, BoxInfo, Color, SelectionType, WaySip, error::WaySipError};
 
 // ─── Selection dispatch ───────────────────────────────────────────────────────
 
@@ -147,16 +147,22 @@ pub(crate) fn run_selection(
         builder = builder.with_background_provider(provider);
     }
 
-    match builder.get() {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            eprintln!("Selection canceled");
-            std::process::exit(0);
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
+    selection_outcome(builder.get()).unwrap_or_else(|(code, message)| {
+        eprintln!("{message}");
+        std::process::exit(code);
+    })
+}
+
+/// The selected area, or the exit code and message for stderr. A canceled
+/// selection exits with 1, like slurp, so `waysip && grim -g ...` and
+/// `geometry=$(waysip) || exit` stop on Esc.
+pub(crate) fn selection_outcome(
+    result: Result<Option<AreaInfo>, WaySipError>,
+) -> Result<AreaInfo, (i32, String)> {
+    match result {
+        Ok(Some(info)) => Ok(info),
+        Ok(None) => Err((1, "Selection canceled".to_string())),
+        Err(e) => Err((1, format!("Error: {e}"))),
     }
 }
 

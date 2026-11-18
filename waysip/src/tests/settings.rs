@@ -151,3 +151,12 @@ fn border_and_selection_colors_go_to_the_right_style_fields() {
         "{builder}"
     );
 }
+
+/// Esc used to exit 0 with "Selection canceled", so `waysip && grim -g ...`
+/// went on with an empty geometry. It exits 1 now, like slurp.
+#[test]
+fn canceled_selection_exits_with_failure() {
+    let (code, message) = selection_outcome(Ok(None)).unwrap_err();
+    assert_eq!(code, 1);
+    assert_eq!(message, "Selection canceled");
+}
