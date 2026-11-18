@@ -701,8 +701,9 @@ pub(crate) struct LayerSurfaceInfo {
     pub pango_layout: std::cell::OnceCell<pango::Layout>,
     pub font_desc_bold: std::cell::OnceCell<pango::FontDescription>,
     pub font_desc_normal: std::cell::OnceCell<pango::FontDescription>,
-    pub prev_selection: Option<[f64; 4]>,
-    pub margin: std::cell::OnceCell<(f64, f64)>,
+    /// The area the previous redraw painted (selection, handles, label),
+    /// repainted on the next one so nothing stale is left behind.
+    pub prev_region: Option<[f64; 4]>,
     pub frozen_bg: Option<cairo::ImageSurface>,
 }
 

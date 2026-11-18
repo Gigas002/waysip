@@ -47,8 +47,7 @@ fn layer_surface_info(conn: &Connection) -> LayerSurfaceInfo {
         pango_layout: std::cell::OnceCell::new(),
         font_desc_bold: std::cell::OnceCell::new(),
         font_desc_normal: std::cell::OnceCell::new(),
-        prev_selection: None,
-        margin: std::cell::OnceCell::new(),
+        prev_region: None,
         frozen_bg: None,
     }
 }
@@ -188,14 +187,14 @@ fn redraw_with_frozen_background_does_not_panic() {
 }
 
 #[test]
-fn redraw_reuses_prev_selection_clip_on_second_call() {
+fn redraw_reuses_prev_region_clip_on_second_call() {
     let conn = dummy_conn();
     let mut info = layer_surface_info(&conn);
     let size = Size {
         width: 200,
         height: 200,
     };
-    // First call has no prev_selection yet (the `else` branch of the
+    // First call has no prev_region yet (the `else` branch of the
     // clip-rect computation); the second exercises the `Some(prev)` branch.
     info.redraw(
         Position { x: 10.0, y: 10.0 },
@@ -207,7 +206,7 @@ fn redraw_reuses_prev_selection_clip_on_second_call() {
         false,
         false,
     );
-    assert!(info.prev_selection.is_some());
+    assert!(info.prev_region.is_some());
     info.redraw(
         Position { x: 15.0, y: 15.0 },
         Position { x: 70.0, y: 70.0 },
@@ -269,4 +268,137 @@ fn predefined_boxes_are_drawn_at_their_size() {
     assert_eq!(pixel(&info, 40, 20), red, "inside the box");
     assert_ne!(pixel(&info, 40, 40), red, "below the box");
     assert_ne!(pixel(&info, 70, 20), red, "right of the box");
+}
+
+/// The label showed the drag's start corner and signed size ("500,500,
+/// -200x-100" for a drag up-left) while waysip printed "300,400 200x100".
+#[test]
+fn label_text_matches_the_printed_geometry() {
+    let end = Position { x: 300.0, y: 400.0 };
+    assert_eq!(label_text(500.0, 500.0, end), "300,400, 200x100");
+    let end = Position { x: 700.5, y: 650.0 };
+    assert_eq!(label_text(500.0, 500.0, end), "500,500, 200x150");
+}
+
+#[test]
+fn label_origin_stays_on_the_surface() {
+    // Room below-right: 10 px from the corner.
+    assert_eq!(
+        label_origin([10.0, 10.0, 50.0, 50.0], (40, 12), (200, 200)),
+        (60.0, 60.0)
+    );
+    // At the bottom-right edge: pulled back in.
+    assert_eq!(
+        label_origin([150.0, 150.0, 199.0, 199.0], (40, 12), (200, 200)),
+        (158.0, 186.0)
+    );
+    // Wider than the surface: pinned to the left edge.
+    assert_eq!(
+        label_origin([0.0, 0.0, 10.0, 10.0], (400, 12), (200, 200)),
+        (0.0, 20.0)
+    );
+}
+
+fn count_pixels(info: &LayerSurfaceInfo, rect: [usize; 4], pred: impl Fn(u32) -> bool) -> usize {
+    let mut n = 0;
+    for y in rect[1]..rect[3] {
+        for x in rect[0]..rect[2] {
+            n += usize::from(pred(pixel(info, x, y)));
+        }
+    }
+    n
+}
+
+/// Near the bottom-right edge the label was drawn past the surface, so it
+/// wasn't shown at all. It is pulled back on, and the next (clipped) redraw
+/// clears it where it was.
+#[test]
+fn label_near_the_edge_is_drawn_and_then_cleared() {
+    let conn = dummy_conn();
+    let mut info = layer_surface_info(&conn);
+    let blue = 0xff0000ff;
+    info.style.background_color = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    info.style.border_text_color = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    let size = Size {
+        width: 200,
+        height: 200,
+    };
+    let origin = Position { x: 0, y: 0 };
+    let p = |x, y| Position { x, y };
+
+    info.redraw(
+        p(150.0, 150.0),
+        p(190.0, 190.0),
+        origin,
+        size,
+        true,
+        None,
+        true,
+        false,
+    );
+    // Left of the selection, in the band the label is pulled into.
+    let label_band = [0, 150, 147, 200];
+    assert!(count_pixels(&info, label_band, |px| px != blue) > 0);
+
+    info.redraw(
+        p(10.0, 10.0),
+        p(30.0, 30.0),
+        origin,
+        size,
+        true,
+        None,
+        false,
+        false,
+    );
+    assert_eq!(count_pixels(&info, label_band, |px| px != blue), 0);
+}
+
+/// A selection spanning outputs is drawn on each of them; the label must
+/// be only on the one with the bottom-right corner, not pulled onto every
+/// output the selection touches.
+#[test]
+fn label_is_only_on_the_output_with_the_corner() {
+    let conn = dummy_conn();
+    let mut info = layer_surface_info(&conn);
+    let blue = 0xff0000ff;
+    info.style.background_color = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    info.style.border_text_color = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    let size = Size {
+        width: 200,
+        height: 200,
+    };
+    let p = |x, y| Position { x, y };
+    // This output is at (0,0); the selection runs on to the right of it.
+    info.redraw(
+        p(50.0, 50.0),
+        p(300.0, 100.0),
+        Position { x: 0, y: 0 },
+        size,
+        true,
+        None,
+        true,
+        false,
+    );
+    // Below the selection: the label would be pulled in here.
+    assert_eq!(count_pixels(&info, [0, 104, 200, 200], |px| px != blue), 0);
 }

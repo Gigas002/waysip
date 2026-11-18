@@ -137,13 +137,13 @@ impl LayerSurfaceInfo {
             self.style.border_weight + 2.0
         };
 
-        let (text_margin_w, text_margin_h) = *self.margin.get_or_init(|| {
-            if !draw_text {
-                return (
-                    self.style.border_weight + 2.0,
-                    self.style.border_weight + 2.0,
-                );
-            }
+        // The label shows what waysip prints: the top-left corner and the
+        // size, whichever way the drag went. It sits below-right of the
+        // selection, moved back onto the surface near its edges, on the one
+        // output that has the selection's bottom-right corner.
+        let corner_here = (0.0..=width as f64).contains(&current_sel[2])
+            && (0.0..=height as f64).contains(&current_sel[3]);
+        let label = if draw_text && corner_here {
             let layout = self
                 .pango_layout
                 .get_or_init(|| pangocairo::functions::create_layout(cairoinfo));
@@ -155,27 +155,27 @@ impl LayerSurfaceInfo {
                 d
             });
             layout.set_font_description(Some(desc));
-            // Worst-case label: max 5-digit coords
-            layout.set_text("-99999,-99999, 99999x99999");
+            layout.set_text(&label_text(start_pos_x, start_pos_y, end_pos));
             let (tw, th) = layout.pixel_size();
-            // 10px offset from selection corner + text size + padding(2px)
-            (tw as f64 + 12.0, th as f64 + 12.0)
-        });
-
-        let clip_rect = if let Some(p) = self.prev_selection.as_ref() {
-            [
-                p[0].min(current_sel[0]) - border_margin,
-                p[1].min(current_sel[1]) - border_margin,
-                p[2].max(current_sel[2]) + text_margin_w,
-                p[3].max(current_sel[3]) + text_margin_h,
-            ]
+            let (lx, ly) = label_origin(current_sel, (tw, th), (width, height));
+            Some([lx, ly, lx + tw as f64, ly + th as f64])
         } else {
-            [
-                current_sel[0] - border_margin,
-                current_sel[1] - border_margin,
-                current_sel[2] + text_margin_w,
-                current_sel[3] + text_margin_h,
-            ]
+            None
+        };
+
+        let mut region = [
+            current_sel[0] - border_margin,
+            current_sel[1] - border_margin,
+            current_sel[2] + border_margin,
+            current_sel[3] + border_margin,
+        ];
+        if let Some(l) = label {
+            region = union(region, [l[0] - 2.0, l[1] - 2.0, l[2] + 2.0, l[3] + 2.0]);
+        }
+        // Repaint what the previous frame drew too, so it gets cleared.
+        let clip_rect = match self.prev_region {
+            Some(prev) => union(prev, region),
+            None => region,
         };
 
         let cx = clip_rect[0].max(0.0);
@@ -287,33 +287,10 @@ impl LayerSurfaceInfo {
             }
         }
 
-        if draw_text {
-            let font_size = self.style.font_size;
-            let pangolayout = self
-                .pango_layout
-                .get_or_init(|| pangocairo::functions::create_layout(cairoinfo));
-            let desc = self.font_desc_bold.get_or_init(|| {
-                let mut d = pango::FontDescription::new();
-                d.set_family(self.style.font_name.as_str());
-                d.set_weight(pango::Weight::Bold);
-                d.set_size(font_size * pango::SCALE);
-                d
-            });
-
-            pangolayout.set_font_description(Some(desc));
-
-            let text = format!(
-                "{},{}, {}x{}",
-                start_pos_x as i32,
-                start_pos_y as i32,
-                (end_pos.x - start_pos_x) as i32,
-                (end_pos.y - start_pos_y) as i32
-            );
-
-            pangolayout.set_text(text.as_str());
+        if let (Some([lx, ly, ..]), Some(layout)) = (label, self.pango_layout.get()) {
             cairoinfo.save().unwrap();
-            cairoinfo.move_to(relate_end_x + 10., relate_end_y + 10.);
-            pangocairo::functions::show_layout(cairoinfo, pangolayout);
+            cairoinfo.move_to(lx, ly);
+            pangocairo::functions::show_layout(cairoinfo, layout);
             cairoinfo.restore().unwrap();
         }
 
@@ -325,8 +302,42 @@ impl LayerSurfaceInfo {
         }
         self.wl_surface.commit();
 
-        self.prev_selection = Some(current_sel);
+        self.prev_region = Some(region);
     }
+}
+
+/// The size label: the top-left corner and the size of the selection, as
+/// waysip prints them (`AreaInfo::left_top_point` and `width`/`height`).
+pub(crate) fn label_text(start_x: f64, start_y: f64, end: Position<f64>) -> String {
+    format!(
+        "{},{}, {}x{}",
+        start_x.min(end.x) as i32,
+        start_y.min(end.y) as i32,
+        (end.x - start_x).abs() as i32,
+        (end.y - start_y).abs() as i32
+    )
+}
+
+/// Where the label of size `(tw, th)` goes for the selection `sel`
+/// (`[x1, y1, x2, y2]`, surface coordinates): 10 px below-right of it, but
+/// kept on a `(width, height)` surface.
+pub(crate) fn label_origin(
+    sel: [f64; 4],
+    (tw, th): (i32, i32),
+    (width, height): (i32, i32),
+) -> (f64, f64) {
+    let x = (sel[2] + 10.0).min((width - tw - 2) as f64).max(0.0);
+    let y = (sel[3] + 10.0).min((height - th - 2) as f64).max(0.0);
+    (x, y)
+}
+
+fn union(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[2].max(b[2]),
+        a[3].max(b[3]),
+    ]
 }
 
 #[derive(Debug)]

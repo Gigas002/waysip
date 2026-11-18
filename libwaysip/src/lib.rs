@@ -365,8 +365,7 @@ fn get_area_inner(
             pango_layout: std::cell::OnceCell::new(),
             font_desc_bold: std::cell::OnceCell::new(),
             font_desc_normal: std::cell::OnceCell::new(),
-            prev_selection: None,
-            margin: std::cell::OnceCell::new(),
+            prev_region: None,
             frozen_bg,
         });
     }
