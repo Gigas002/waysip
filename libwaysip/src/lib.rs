@@ -264,8 +264,9 @@ fn get_area_inner(
 
     state.cursor_manager = cursor_manager;
 
+    // Version 3 is needed to release the pointer and keyboard again.
     globals
-        .bind::<WlSeat, _, _>(&qh, 1..=1, ())
+        .bind::<WlSeat, _, _>(&qh, 1..=5, ())
         .map_err(WaySipError::NotSupportedProtocol)?;
 
     let _ = connection.display().get_registry(&qh, ()); // so if you want WlOutput, you need to
@@ -349,6 +350,7 @@ fn get_area_inner(
 
         let buffer =
             pool.create_buffer(0, init_w, init_h, stride, wl_shm::Format::Argb8888, &qh, ());
+        pool.destroy();
 
         let cursor_surface = wmcompositer.create_surface(&qh, ()); // and create a surface. if two or more,
         state.wl_surfaces.push(state::LayerSurfaceInfo {
@@ -383,13 +385,13 @@ fn get_area_inner(
             .map_err(WaySipError::DispatchError)?;
     }
 
+    let area_info = state.area_info();
+    state.teardown();
     layer_shell.destroy();
-    for surface in &state.wl_surfaces {
-        surface.layer.destroy();
-        surface.wl_surface.destroy();
-        surface.cursor_surface.destroy();
-        surface.buffer.destroy();
-    }
-    state.wl_surfaces.clear();
-    Ok(state.area_info())
+    xdg_output_manager.destroy();
+    // Have the compositor process the destroys before returning: with a
+    // connection the caller keeps (`with_connection`), they would otherwise
+    // sit unsent and the overlay would stay on screen.
+    let _ = event_queue.roundtrip(&mut state);
+    Ok(area_info)
 }

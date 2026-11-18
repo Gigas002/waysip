@@ -1,10 +1,12 @@
 use std::{cell::OnceCell, os::fd::AsFd};
 
 use wayland_client::{
-    QueueHandle,
+    Proxy, QueueHandle,
     protocol::{
         wl_buffer::WlBuffer,
+        wl_keyboard::WlKeyboard,
         wl_output::WlOutput,
+        wl_pointer::WlPointer,
         wl_shm::{self, WlShm},
         wl_surface::WlSurface,
     },
@@ -245,6 +247,10 @@ pub struct WaysipState {
     /// (as opposed to the default system cursor), used to avoid redundant
     /// cursor-shape requests
     pub(crate) cursor_is_crosshair: Option<bool>,
+    /// The seat's pointer and keyboard, kept so they can be released when
+    /// the seat loses the capability and when the selection ends.
+    pub(crate) pointer: Option<WlPointer>,
+    pub(crate) keyboard: Option<WlKeyboard>,
 }
 
 impl WaysipState {
@@ -279,6 +285,8 @@ impl WaysipState {
             move_anchor: None,
             last_pointer_serial: None,
             cursor_is_crosshair: None,
+            pointer: None,
+            keyboard: None,
         }
     }
 
@@ -354,6 +362,9 @@ impl WaysipState {
             .create_pool(file.as_fd(), width * height * 4, qh, ());
 
         let buffer = pool.create_buffer(0, width, height, stride, wl_shm::Format::Argb8888, qh, ());
+        // The buffer keeps the pool's memory alive; the pool itself isn't
+        // needed any more.
+        pool.destroy();
 
         let old_buffer = std::mem::replace(&mut surface_info.buffer, buffer);
         let old_cairo_t = std::mem::replace(&mut surface_info.cairo_t, cairo_t);
@@ -560,6 +571,38 @@ impl WaysipState {
             self.editing = true;
         } else {
             self.running = false;
+        }
+    }
+
+    /// Destroys every object the selection created on the connection: the
+    /// overlay surfaces and buffers, the xdg outputs, the pointer and
+    /// keyboard. A connection passed in with `WaySip::with_connection` is
+    /// left as it was found, apart from the bound globals; the outputs are
+    /// kept, as `ScreenInfo` hands them out.
+    pub(crate) fn teardown(&mut self) {
+        for surface in self.wl_surfaces.drain(..) {
+            surface.layer.destroy();
+            surface.wl_surface.destroy();
+            surface.cursor_surface.destroy();
+            surface.buffer.destroy();
+        }
+        for output in &self.wloutput_infos {
+            if let Some(xdg) = output.xdg_output_info.get() {
+                xdg.zxdg_output.destroy();
+            }
+        }
+        if let Some(pointer) = self.pointer.take()
+            && pointer.version() >= 3
+        {
+            pointer.release();
+        }
+        if let Some(keyboard) = self.keyboard.take()
+            && keyboard.version() >= 3
+        {
+            keyboard.release();
+        }
+        if let Some(cursor_manager) = self.cursor_manager.take() {
+            cursor_manager.destroy();
         }
     }
 

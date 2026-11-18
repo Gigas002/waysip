@@ -170,7 +170,7 @@ impl Dispatch<xdg_wm_base::XdgWmBase, ()> for state::WaysipState {
 
 impl Dispatch<wl_seat::WlSeat, ()> for state::WaysipState {
     fn event(
-        _state: &mut Self,
+        state: &mut Self,
         seat: &wl_seat::WlSeat,
         event: <wl_seat::WlSeat as Proxy>::Event,
         _data: &(),
@@ -181,11 +181,25 @@ impl Dispatch<wl_seat::WlSeat, ()> for state::WaysipState {
             capabilities: WEnum::Value(capabilities),
         } = event
         {
-            if capabilities.contains(wl_seat::Capability::Keyboard) {
-                seat.get_keyboard(qh, ());
+            // Capabilities are re-sent whenever a device comes or goes: get a
+            // pointer/keyboard once, and release it when the capability goes.
+            let has_keyboard = capabilities.contains(wl_seat::Capability::Keyboard);
+            if has_keyboard && state.keyboard.is_none() {
+                state.keyboard = Some(seat.get_keyboard(qh, ()));
+            } else if !has_keyboard
+                && let Some(keyboard) = state.keyboard.take()
+                && keyboard.version() >= 3
+            {
+                keyboard.release();
             }
-            if capabilities.contains(wl_seat::Capability::Pointer) {
-                seat.get_pointer(qh, ());
+            let has_pointer = capabilities.contains(wl_seat::Capability::Pointer);
+            if has_pointer && state.pointer.is_none() {
+                state.pointer = Some(seat.get_pointer(qh, ()));
+            } else if !has_pointer
+                && let Some(pointer) = state.pointer.take()
+                && pointer.version() >= 3
+            {
+                pointer.release();
             }
         }
     }

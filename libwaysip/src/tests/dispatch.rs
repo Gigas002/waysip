@@ -465,6 +465,39 @@ fn seat_capabilities_pointer_and_keyboard_do_not_panic() {
     );
 }
 
+/// Capabilities are re-sent whenever an input device comes or goes. Each
+/// event used to create another pointer/keyboard without releasing the old
+/// one; they are now kept and dropped with the capability.
+#[test]
+fn seat_capabilities_track_one_pointer_and_keyboard() {
+    let conn = dummy_conn();
+    let qh = conn.new_event_queue::<WaysipState>().handle();
+    let seat: wl_seat::WlSeat = inert(&conn);
+    let mut state = base_state();
+    let caps = |state: &mut WaysipState, c: wl_seat::Capability| {
+        <WaysipState as Dispatch<wl_seat::WlSeat, ()>>::event(
+            state,
+            &seat,
+            wl_seat::Event::Capabilities {
+                capabilities: WEnum::Value(c),
+            },
+            &(),
+            &conn,
+            &qh,
+        );
+    };
+    let both = wl_seat::Capability::Pointer | wl_seat::Capability::Keyboard;
+
+    caps(&mut state, both);
+    assert!(state.pointer.is_some() && state.keyboard.is_some());
+    caps(&mut state, wl_seat::Capability::Keyboard);
+    assert!(state.pointer.is_none() && state.keyboard.is_some());
+    caps(&mut state, wl_seat::Capability::empty());
+    assert!(state.pointer.is_none() && state.keyboard.is_none());
+    caps(&mut state, both);
+    assert!(state.pointer.is_some() && state.keyboard.is_some());
+}
+
 // --- wl_pointer: Button ---
 
 #[test]

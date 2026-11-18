@@ -16,9 +16,9 @@
 //! these replicate just its setup (registry + xdg_output round trip) to
 //! prove that part works against a real server.
 
-use wayland_client::Connection;
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::{wl_compositor::WlCompositor, wl_seat::WlSeat, wl_shm::WlShm};
+use wayland_client::{Connection, Proxy};
 use wayland_protocols::xdg::xdg_output::zv1::client::zxdg_output_manager_v1::ZxdgOutputManagerV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 
@@ -135,4 +135,53 @@ fn area_info_computes_correct_geometry_from_real_output() {
     let top_left = area.left_top_point();
     assert_eq!(top_left.x, 10);
     assert_eq!(top_left.y, 20);
+}
+
+/// The selection used to leave its xdg outputs (and pointer, keyboard and
+/// a shm pool per buffer) on the connection, which a caller can keep with
+/// `WaySip::with_connection`. `teardown` destroys them; the protocol
+/// accepts the requests (the roundtrip would fail on a protocol error).
+/// The headless compositor has no input devices, so the pointer and
+/// keyboard are covered by `seat_capabilities_track_one_pointer_and_keyboard`.
+#[test]
+fn teardown_destroys_what_the_selection_created() {
+    if skip_without_compositor() {
+        return;
+    }
+    let connection = Connection::connect_to_env().expect("should connect to the CI compositor");
+    let (globals, _) = registry_queue_init::<WaysipState>(&connection).unwrap();
+    let mut state = WaysipState::new(SelectionType::Area);
+    let mut event_queue = connection.new_event_queue::<WaysipState>();
+    let qh = event_queue.handle();
+    let _ = connection.display().get_registry(&qh, ());
+    event_queue.roundtrip(&mut state).unwrap();
+    let xdg_output_manager = globals
+        .bind::<ZxdgOutputManagerV1, _, _>(&qh, 1..=3, ())
+        .unwrap();
+    for output in state.wloutput_infos.iter_mut() {
+        let xdg = xdg_output_manager.get_xdg_output(output.get_output(), &qh, ());
+        let _ = output.xdg_output_info.set(state::ZXdgOutputInfo::new(xdg));
+    }
+    event_queue.roundtrip(&mut state).unwrap();
+
+    let xdg_outputs: Vec<_> = state
+        .wloutput_infos
+        .iter()
+        .map(|o| o.zxdg_output().clone())
+        .collect();
+    assert!(!xdg_outputs.is_empty());
+
+    state.teardown();
+    event_queue
+        .roundtrip(&mut state)
+        .expect("teardown must not cause a protocol error");
+
+    assert!(xdg_outputs.iter().all(|x| !x.is_alive()));
+    // The outputs stay: `ScreenInfo` hands them to the caller.
+    assert!(
+        state
+            .wloutput_infos
+            .iter()
+            .all(|o| o.get_output().is_alive())
+    );
 }
