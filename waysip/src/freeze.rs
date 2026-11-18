@@ -53,35 +53,39 @@ pub fn capture_backgrounds()
 /// Converts an [`image::DynamicImage`] into a premultiplied-alpha
 /// `cairo::ImageSurface` (`ARgb32`) suitable for use as a paint source.
 pub(crate) fn image_to_argb_surface(image: image::DynamicImage) -> Option<cairo::ImageSurface> {
-    let rgba = image.to_rgba8();
-    let width = rgba.width() as i32;
-    let height = rgba.height() as i32;
+    // `into_rgba8` takes the buffer as is when it already is RGBA8.
+    let rgba = image.into_rgba8();
+    let (width, height) = (rgba.width() as usize, rgba.height() as usize);
     if width == 0 || height == 0 {
         return None;
     }
-
-    let stride = cairo::Format::ARgb32.stride_for_width(width as u32).ok()?;
-    let src = rgba.as_raw();
-    let mut data = vec![0u8; stride as usize * height as usize];
-
-    for y in 0..height as usize {
-        let row = y * stride as usize;
-        for x in 0..width as usize {
-            let si = (y * width as usize + x) * 4;
-            let r = src[si] as u32;
-            let g = src[si + 1] as u32;
-            let b = src[si + 2] as u32;
-            let a = src[si + 3] as u32;
-            // cairo's ARgb32 stores premultiplied-alpha pixels.
-            let pr = r * a / 255;
-            let pg = g * a / 255;
-            let pb = b * a / 255;
-            let pixel = (a << 24) | (pr << 16) | (pg << 8) | pb;
-
-            let di = row + x * 4;
-            data[di..di + 4].copy_from_slice(&pixel.to_ne_bytes());
+    let stride = cairo::Format::ARgb32.stride_for_width(width as u32).ok()? as usize;
+    let mut data = vec![0u8; stride * height];
+    for (src_row, dst_row) in rgba
+        .as_raw()
+        .chunks_exact(width * 4)
+        .zip(data.chunks_exact_mut(stride))
+    {
+        let (src_px, _) = src_row.as_chunks::<4>();
+        let (dst_px, _) = dst_row.as_chunks_mut::<4>();
+        for (s, d) in src_px.iter().zip(dst_px) {
+            let [r, g, b, a] = s.map(u32::from);
+            // cairo's ARgb32 stores premultiplied-alpha pixels; screenshots
+            // are opaque, which needs no multiplying.
+            let (r, g, b) = if a == 255 {
+                (r, g, b)
+            } else {
+                (r * a / 255, g * a / 255, b * a / 255)
+            };
+            *d = ((a << 24) | (r << 16) | (g << 8) | b).to_ne_bytes();
         }
     }
-
-    cairo::ImageSurface::create_for_data(data, cairo::Format::ARgb32, width, height, stride).ok()
+    cairo::ImageSurface::create_for_data(
+        data,
+        cairo::Format::ARgb32,
+        width as i32,
+        height as i32,
+        stride as i32,
+    )
+    .ok()
 }
