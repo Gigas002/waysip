@@ -679,6 +679,48 @@ fn pointer_enter_sets_current_screen_and_pos() {
     assert_eq!(state.last_pointer_serial, Some(9));
 }
 
+/// With `-r`, only motion picked a box: when the pointer was already over
+/// one as the overlay mapped, a click without moving canceled.
+#[test]
+fn pointer_enter_over_a_predefined_box_selects_it() {
+    let conn = dummy_conn();
+    let qh = conn.new_event_queue::<WaysipState>().handle();
+    let pointer: wl_pointer::WlPointer = inert(&conn);
+    let mut state = WaysipState::new(SelectionType::PredefinedBoxes);
+    state.qh = Some(qh.clone());
+    state.set_boxes(vec![BoxInfo {
+        start_x: 100.0,
+        start_y: 100.0,
+        end_x: 500.0,
+        end_y: 300.0,
+    }]);
+    let surface_info = layer_surface_info(&conn);
+    let surface_handle = surface_info.wl_surface.clone();
+    state
+        .wloutput_infos
+        .push(output_with_xdg_info(&conn, (0, 0), (1920, 1080)));
+    state.wl_surfaces.push(surface_info);
+
+    <WaysipState as Dispatch<wl_pointer::WlPointer, ()>>::event(
+        &mut state,
+        &pointer,
+        wl_pointer::Event::Enter {
+            serial: 1,
+            surface: surface_handle,
+            surface_x: 150.0,
+            surface_y: 150.0,
+        },
+        &(),
+        &conn,
+        &qh,
+    );
+    release_at(&mut state, &conn, 150.0, 150.0);
+
+    let info = state.area_info().expect("the box under the pointer");
+    assert_eq!(info.left_top_point().x, 100);
+    assert_eq!((info.width(), info.height()), (400, 200));
+}
+
 #[test]
 fn pointer_enter_with_cursor_manager_requests_crosshair_shape() {
     let conn = dummy_conn();

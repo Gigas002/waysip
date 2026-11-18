@@ -357,6 +357,12 @@ impl Dispatch<wl_pointer::WlPointer, ()> for state::WaysipState {
                     y: surface_y + start_y as f64,
                 };
 
+                // The pointer can already be over a box when the overlay maps
+                // (or come back onto it): a click without moving must pick it.
+                if dispatch_state.is_predefined_boxes() {
+                    dispatch_state.snap_to_box();
+                }
+
                 dispatch_state.last_pointer_serial = Some(serial);
                 // Force a fresh cursor-shape request since we just entered the surface.
                 dispatch_state.cursor_is_crosshair = None;
@@ -398,29 +404,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for state::WaysipState {
                             Some(dispatch_state.area_end_for(dispatch_state.current_pos));
                         dispatch_state.try_commit();
                     } else if dispatch_state.is_predefined_boxes() {
-                        let current_pos = dispatch_state.current_pos;
-                        if let Some(box_info) = dispatch_state
-                            .predefined_boxes
-                            .clone()
-                            .unwrap()
-                            .iter()
-                            .find(|box_info| {
-                                current_pos.x >= box_info.start_x
-                                    && current_pos.x <= box_info.end_x
-                                    && current_pos.y >= box_info.start_y
-                                    && current_pos.y <= box_info.end_y
-                            })
-                        {
-                            dispatch_state.end_pos = Some(dispatch_state.current_pos);
-                            dispatch_state.set_start_pos(Position {
-                                x: box_info.start_x,
-                                y: box_info.start_y,
-                            });
-                            dispatch_state.end_pos = Some(Position {
-                                x: box_info.end_x,
-                                y: box_info.end_y,
-                            });
-                        }
+                        dispatch_state.snap_to_box();
                         dispatch_state.try_commit();
                     }
                 }

@@ -533,6 +533,28 @@ impl WaysipState {
         }
     }
 
+    /// Selects the predefined box under the pointer, or clears the
+    /// selection when the pointer isn't over one (a click there cancels).
+    pub(crate) fn snap_to_box(&mut self) {
+        let pos = self.current_pos;
+        let hit = self.predefined_boxes.as_ref().and_then(|boxes| {
+            boxes.iter().copied().find(|b| {
+                pos.x >= b.start_x && pos.x <= b.end_x && pos.y >= b.start_y && pos.y <= b.end_y
+            })
+        });
+        self.end_pos = None;
+        if let Some(b) = hit {
+            self.set_start_pos(Position {
+                x: b.start_x,
+                y: b.start_y,
+            });
+            self.end_pos = Some(Position {
+                x: b.end_x,
+                y: b.end_y,
+            });
+        }
+    }
+
     pub(crate) fn finish_or_start_editing(&mut self) {
         if self.edit_enabled && self.is_effective_area() {
             self.editing = true;
