@@ -171,7 +171,7 @@ pub(crate) fn selection_outcome(
 pub(crate) fn resolve_output_format(args: &mut Cli) -> String {
     match args.screen {
         true => {
-            "Screen : %o %d\nlogic_width: %w, logic_height: %h\nwidth: %L, height: %T".to_string()
+            "Screen : %o %d\nlogic_width: %w, logic_height: %h\nwidth: %L, height: %T\n".to_string()
         }
         false => std::mem::take(&mut args.format),
     }

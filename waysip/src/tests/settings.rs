@@ -103,6 +103,8 @@ fn resolve_output_format_uses_screen_template() {
     let mut args = cli(&["-i", "-f", "custom"]);
     let fmt = resolve_output_format(&mut args);
     assert!(fmt.starts_with("Screen : %o %d"));
+    // Every other format ends its line; `-i` ran into the shell prompt.
+    assert!(fmt.ends_with('\n'));
 }
 
 #[test]
