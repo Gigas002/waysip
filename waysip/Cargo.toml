@@ -15,7 +15,7 @@ readme.workspace = true
 default = ["logger", "completions", "frame-limit"]
 # Initialises the tracing subscriber and exposes the `--log-level` CLI flag.
 # Disable to suppress all stderr log output entirely.
-logger = ["dep:tracing-subscriber"]
+logger = ["dep:tracing", "dep:tracing-subscriber"]
 # Adds `--completions <SHELL>` for generating shell completion scripts.
 completions = ["dep:clap_complete", "dep:clap_complete_nushell"]
 frame-limit = ["libwaysip/frame-limit"]
@@ -32,7 +32,7 @@ clap_complete_nushell = { version = "4.6", optional = true }
 image = { version = "0.25", optional = true, default-features = false }
 libwaysip.workspace = true
 libwayshot = { version = "0.10", optional = true, default-features = false }
-tracing.workspace = true
+tracing = { workspace = true, optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 wayland-client = { workspace = true, optional = true }
 
