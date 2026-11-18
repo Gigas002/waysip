@@ -16,7 +16,8 @@
 
 NOTE: Run `waysip --help` for the full list of flags and options.
 
-Interactive rectangular area (prints position and size using the default format):
+Interactive rectangular area (prints position and size using the default format; `-d`
+is also the default when no mode is given, so plain `waysip` does the same):
 
 ```bash
 waysip -d

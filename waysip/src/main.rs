@@ -36,7 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             print_bench_results(SelectionType::PredefinedBoxes, &info.timestamps_total);
         }
         print!("{}", apply_format(&info, &fmt, false));
-    } else if let Some(mode) = SelectionDispatch::from_cli(&args) {
+    } else {
+        let mode = SelectionDispatch::from_cli(&args);
         let selection_type = mode.selection_type();
         let info = run_selection(&mut args, selection_type, None);
         #[cfg(feature = "benchmark")]

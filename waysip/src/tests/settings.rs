@@ -13,7 +13,7 @@ fn dispatch_point() {
     let args = cli(&["-p"]);
     assert!(matches!(
         SelectionDispatch::from_cli(&args),
-        Some(SelectionDispatch::Point)
+        SelectionDispatch::Point
     ));
 }
 
@@ -22,7 +22,7 @@ fn dispatch_dimensions_and_output() {
     let args = cli(&["-d", "-o"]);
     assert!(matches!(
         SelectionDispatch::from_cli(&args),
-        Some(SelectionDispatch::DimensionsOrOutput)
+        SelectionDispatch::DimensionsOrOutput
     ));
 }
 
@@ -31,7 +31,7 @@ fn dispatch_dimensions_only() {
     let args = cli(&["-d"]);
     assert!(matches!(
         SelectionDispatch::from_cli(&args),
-        Some(SelectionDispatch::Area)
+        SelectionDispatch::Area
     ));
 }
 
@@ -40,7 +40,7 @@ fn dispatch_output_only() {
     let args = cli(&["-o"]);
     assert!(matches!(
         SelectionDispatch::from_cli(&args),
-        Some(SelectionDispatch::Screen)
+        SelectionDispatch::Screen
     ));
 }
 
@@ -49,20 +49,33 @@ fn dispatch_screen_flag() {
     let args = cli(&["-i"]);
     assert!(matches!(
         SelectionDispatch::from_cli(&args),
-        Some(SelectionDispatch::Screen)
+        SelectionDispatch::Screen
     ));
 }
 
+/// Bare `waysip` (and `waysip -a 16:9`, `waysip -e`, `waysip -f ...`) used
+/// to do nothing and exit 0; it now selects an area, like `-d` and slurp.
 #[test]
-fn dispatch_none_by_default() {
-    let args = cli(&[]);
-    assert!(SelectionDispatch::from_cli(&args).is_none());
+fn dispatch_area_by_default() {
+    for args in [&[][..], &["-a", "16:9"], &["-e"], &["-f", "%x\n"]] {
+        assert!(
+            matches!(
+                SelectionDispatch::from_cli(&cli(args)),
+                SelectionDispatch::Area
+            ),
+            "{args:?}"
+        );
+    }
 }
 
+/// `-r` is handled in `main` before the dispatch, so it doesn't pick a mode.
 #[test]
 fn dispatch_ignores_boxes_flag() {
     let args = cli(&["-r"]);
-    assert!(SelectionDispatch::from_cli(&args).is_none());
+    assert!(matches!(
+        SelectionDispatch::from_cli(&args),
+        SelectionDispatch::Area
+    ));
 }
 
 #[test]

@@ -8,6 +8,7 @@ use libwaysip::{AreaInfo, BoxInfo, Color, SelectionType, WaySip};
 // ─── Selection dispatch ───────────────────────────────────────────────────────
 
 /// Interactive selection mode from CLI flags (excluding `--boxes`, handled separately).
+/// Without a mode flag, waysip selects an area, like `-d` (and like slurp).
 #[derive(Clone, Copy)]
 pub(crate) enum SelectionDispatch {
     Point,
@@ -18,17 +19,15 @@ pub(crate) enum SelectionDispatch {
 }
 
 impl SelectionDispatch {
-    pub(crate) fn from_cli(args: &Cli) -> Option<Self> {
+    pub(crate) fn from_cli(args: &Cli) -> Self {
         if args.point {
-            Some(Self::Point)
+            Self::Point
         } else if args.dimensions && args.output {
-            Some(Self::DimensionsOrOutput)
-        } else if args.dimensions {
-            Some(Self::Area)
+            Self::DimensionsOrOutput
         } else if args.output || args.screen {
-            Some(Self::Screen)
+            Self::Screen
         } else {
-            None
+            Self::Area
         }
     }
 
