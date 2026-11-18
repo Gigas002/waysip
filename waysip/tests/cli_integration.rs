@@ -143,6 +143,20 @@ fn invalid_aspect_ratio_height_fails_cleanly_before_touching_wayland() {
     assert!(!stderr.contains("panicked at"));
 }
 
+#[test]
+fn zero_or_negative_aspect_ratio_fails_cleanly_before_touching_wayland() {
+    // A zero side divided by zero when constraining the drag.
+    for ratio in ["0:9", "16:0", "16:-9", "inf:9"] {
+        let output = waysip_cmd()
+            .args(["-d", "-a", ratio])
+            .output()
+            .expect("failed to run waysip binary");
+        assert!(!output.status.success(), "{ratio}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("must be positive"), "{ratio}: {stderr}");
+    }
+}
+
 // ─── Flags that reach further into `run_selection` before failing ────────
 //
 // These pass argument validation cleanly and reach `edit_selection`/

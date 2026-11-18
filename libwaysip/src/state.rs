@@ -511,6 +511,28 @@ impl WaysipState {
         }
     }
 
+    /// Where the end corner of an area selection goes for a pointer at `pos`:
+    /// `pos` itself, or, with an aspect ratio, the smallest box of that ratio
+    /// from the start corner that reaches the pointer, growing in the
+    /// direction of the drag (left/up drags stay left/up).
+    pub(crate) fn area_end_for(&self, pos: Position<f64>) -> Position<f64> {
+        let Some((ratio_w, ratio_h)) = self.aspect_ratio else {
+            return pos;
+        };
+        let start = self.start_pos.unwrap_or(pos);
+        let (dx, dy) = (pos.x - start.x, pos.y - start.y);
+        let (w, h) = (dx.abs(), dy.abs());
+        let (w, h) = if ratio_w * h > w * ratio_h {
+            (h * ratio_w / ratio_h, h)
+        } else {
+            (w, w * ratio_h / ratio_w)
+        };
+        Position {
+            x: start.x + w.copysign(dx),
+            y: start.y + h.copysign(dy),
+        }
+    }
+
     pub(crate) fn finish_or_start_editing(&mut self) {
         if self.edit_enabled && self.is_effective_area() {
             self.editing = true;

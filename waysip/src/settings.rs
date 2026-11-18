@@ -64,6 +64,10 @@ pub(crate) fn parse_aspect_ratio(s: String) -> (f64, f64) {
         eprintln!("Invalid height in aspect ratio");
         std::process::exit(1);
     });
+    if !(width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0) {
+        eprintln!("Invalid aspect ratio, width and height must be positive numbers");
+        std::process::exit(1);
+    }
     (width, height)
 }
 

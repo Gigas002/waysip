@@ -313,8 +313,15 @@ impl Dispatch<wl_pointer::WlPointer, ()> for state::WaysipState {
                                 // Behave like dimensions selection (-d)
                                 dispatch_state.effective_selection_type =
                                     Some(crate::state::SelectionType::Area);
-                                dispatch_state.end_pos = Some(dispatch_state.current_pos);
+                                dispatch_state.end_pos =
+                                    Some(dispatch_state.area_end_for(dispatch_state.current_pos));
                             }
+                            dispatch_state.finish_or_start_editing();
+                        } else if dispatch_state.is_area() {
+                            // The motion handler already applied any aspect
+                            // ratio; the release must not undo it.
+                            dispatch_state.end_pos =
+                                Some(dispatch_state.area_end_for(dispatch_state.current_pos));
                             dispatch_state.finish_or_start_editing();
                         } else if !dispatch_state.is_predefined_boxes() {
                             dispatch_state.end_pos = Some(dispatch_state.current_pos);
@@ -387,28 +394,8 @@ impl Dispatch<wl_pointer::WlPointer, ()> for state::WaysipState {
                     // need to know the end_pos immediately. so even the start_pos is not decided, we
                     // still need an end_pos
                     if dispatch_state.is_area() || dispatch_state.is_dimensions_or_output() {
-                        if let Some(ratio) = dispatch_state.aspect_ratio {
-                            let width_rel = ratio.0;
-                            let height_rel = ratio.1;
-                            let start_pos = dispatch_state
-                                .start_pos
-                                .unwrap_or(dispatch_state.current_pos);
-                            let width = dispatch_state.current_pos.x - start_pos.x;
-                            let height = dispatch_state.current_pos.y - start_pos.y;
-                            if width_rel / height_rel > width / height {
-                                dispatch_state.end_pos = Some(Position {
-                                    x: start_pos.x + height * width_rel / height_rel,
-                                    y: start_pos.y + height,
-                                });
-                            } else {
-                                dispatch_state.end_pos = Some(Position {
-                                    x: start_pos.x + width,
-                                    y: start_pos.y + width * height_rel / width_rel,
-                                });
-                            }
-                        } else {
-                            dispatch_state.end_pos = Some(dispatch_state.current_pos);
-                        }
+                        dispatch_state.end_pos =
+                            Some(dispatch_state.area_end_for(dispatch_state.current_pos));
                         dispatch_state.try_commit();
                     } else if dispatch_state.is_predefined_boxes() {
                         let current_pos = dispatch_state.current_pos;

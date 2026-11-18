@@ -807,6 +807,75 @@ fn pointer_motion_respects_aspect_ratio_width_driven() {
     assert!((end.y - 200.0 * 9.0 / 16.0).abs() < 0.001);
 }
 
+fn release_at(state: &mut WaysipState, conn: &Connection, x: f64, y: f64) {
+    let qh = state.qh.clone().unwrap();
+    let pointer: wl_pointer::WlPointer = inert(conn);
+    state.current_pos = Position { x, y };
+    <WaysipState as Dispatch<wl_pointer::WlPointer, ()>>::event(
+        state,
+        &pointer,
+        wl_pointer::Event::Button {
+            serial: 2,
+            time: 0,
+            button: 272,
+            state: WEnum::Value(wl_pointer::ButtonState::Released),
+        },
+        &(),
+        conn,
+        &qh,
+    );
+}
+
+/// The release used to set the end corner to the raw pointer position, so
+/// `-a 16:9` printed whatever was dragged (a 100x100 drag printed 100x100).
+#[test]
+fn release_keeps_the_aspect_ratio() {
+    let conn = dummy_conn();
+    let mut state = base_state();
+    state.qh = Some(conn.new_event_queue::<WaysipState>().handle());
+    state
+        .wloutput_infos
+        .push(output_with_xdg_info(&conn, (0, 0), (1920, 1080)));
+    state.aspect_ratio = Some((16.0, 9.0));
+    state.start_pos = Some(Position { x: 500.0, y: 500.0 });
+
+    release_at(&mut state, &conn, 600.0, 600.0);
+
+    let info = state.area_info().unwrap();
+    assert!((info.width_f64() - 100.0 * 16.0 / 9.0).abs() < 1e-9);
+    assert_eq!(info.height_f64(), 100.0);
+    assert!(!state.running);
+}
+
+/// Dragging left or up used to flip the box to the right of the start point
+/// (the ratio test compared signed sizes).
+#[test]
+fn aspect_ratio_follows_the_drag_direction() {
+    let conn = dummy_conn();
+    let mut state = base_state();
+    state.qh = Some(conn.new_event_queue::<WaysipState>().handle());
+    state
+        .wloutput_infos
+        .push(output_with_xdg_info(&conn, (0, 0), (1920, 1080)));
+    state.aspect_ratio = Some((2.0, 1.0));
+    state.start_pos = Some(Position { x: 500.0, y: 500.0 });
+
+    for ((px, py), (ex, ey)) in [
+        ((400.0, 600.0), (300.0, 600.0)), // down-left, height drives
+        ((300.0, 450.0), (300.0, 400.0)), // up-left, width drives
+        ((700.0, 300.0), (900.0, 300.0)), // up-right, height drives
+        ((700.0, 520.0), (700.0, 600.0)), // down-right, width drives
+    ] {
+        let end = state.area_end_for(Position { x: px, y: py });
+        assert_eq!((end.x, end.y), (ex, ey), "pointer at {px},{py}");
+    }
+
+    release_at(&mut state, &conn, 400.0, 600.0);
+    let info = state.area_info().unwrap();
+    assert_eq!(info.left_top_point().x, 300);
+    assert_eq!((info.width(), info.height()), (200, 100));
+}
+
 #[test]
 fn pointer_motion_over_predefined_box_snaps_selection() {
     let conn = dummy_conn();
