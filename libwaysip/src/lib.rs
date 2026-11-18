@@ -49,6 +49,12 @@ fn get_cursor_buffer(connection: &Connection, shm: &WlShm) -> Option<CursorImage
     Some(cursor?[0].clone())
 }
 
+/// Whether the xcursor theme has to be loaded: only when the compositor
+/// can't set the cursor shape itself.
+pub(crate) fn needs_cursor_theme(cursor_manager: Option<&WpCursorShapeManagerV1>) -> bool {
+    cursor_manager.is_none()
+}
+
 #[derive(Default)]
 pub struct WaySip {
     conn: Option<Connection>,
@@ -256,7 +262,13 @@ fn get_area_inner(
         .bind::<WlShm, _, _>(&qh, 1..=1, ())
         .map_err(WaySipError::NotSupportedProtocol)?;
 
-    let cursor_buffer = get_cursor_buffer(connection, &shm);
+    // The themed cursor is only a fallback for compositors without
+    // cursor-shape; loading the theme reads it from disk on every start.
+    let cursor_buffer = if needs_cursor_theme(cursor_manager.as_ref()) {
+        get_cursor_buffer(connection, &shm)
+    } else {
+        None
+    };
 
     if cursor_manager.is_none() && cursor_buffer.is_none() {
         return Err(WaySipError::CursorThemeFetchFailed);

@@ -92,3 +92,17 @@ fn builder_sets_bench_flag() {
     let sip = WaySip::new().with_bench();
     assert!(sip.bench);
 }
+
+/// The xcursor theme was loaded from disk on every start, though it is only
+/// used when the compositor lacks cursor-shape.
+#[test]
+fn cursor_theme_is_only_needed_without_cursor_shape() {
+    let (client, server) = std::os::unix::net::UnixStream::pair().unwrap();
+    Box::leak(Box::new(server));
+    let conn = wayland_client::Connection::from_backend(
+        wayland_backend::client::Backend::connect(client).unwrap(),
+    );
+    let manager: WpCursorShapeManagerV1 = wayland_client::Proxy::inert(conn.backend().downgrade());
+    assert!(!needs_cursor_theme(Some(&manager)));
+    assert!(needs_cursor_theme(None));
+}
