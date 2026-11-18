@@ -73,21 +73,25 @@ pub(crate) fn parse_aspect_ratio(s: String) -> (f64, f64) {
 
 // ─── WaySip from CLI ──────────────────────────────────────────────────────────
 
-pub(crate) fn run_selection(
+/// Builds the [`WaySip`] request from the CLI flags (everything but
+/// `--freeze`, which takes screenshots).
+pub(crate) fn builder_from_args(
     args: &mut Cli,
     sel: SelectionType,
     boxes: Option<Vec<BoxInfo>>,
-) -> AreaInfo {
+) -> WaySip {
     let mut builder = WaySip::new().with_selection_type(sel);
 
     if let Some(color) = args.background.take() {
         builder = builder.with_background_color(parse_hex_color(color));
     }
+    // `-c` is the border and text color, `-s` fills the selection (as in
+    // slurp); libwaysip calls the selection fill the foreground.
     if let Some(color) = args.border_color.take() {
-        builder = builder.with_foreground_color(parse_hex_color(color));
+        builder = builder.with_border_text_color(parse_hex_color(color));
     }
     if let Some(color) = args.selection_color.take() {
-        builder = builder.with_border_text_color(parse_hex_color(color));
+        builder = builder.with_foreground_color(parse_hex_color(color));
     }
     if let Some(color) = args.box_color.take() {
         builder = builder.with_box_color(parse_hex_color(color));
@@ -124,6 +128,17 @@ pub(crate) fn run_selection(
     if args.bench {
         builder = builder.with_bench();
     }
+
+    builder
+}
+
+pub(crate) fn run_selection(
+    args: &mut Cli,
+    sel: SelectionType,
+    boxes: Option<Vec<BoxInfo>>,
+) -> AreaInfo {
+    #[allow(unused_mut)]
+    let mut builder = builder_from_args(args, sel, boxes);
 
     #[cfg(feature = "freeze")]
     if args.freeze

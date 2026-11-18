@@ -130,3 +130,24 @@ fn parse_hex_color_valid() {
 fn parse_aspect_ratio_valid() {
     assert_eq!(parse_aspect_ratio("16:9".to_string()), (16.0, 9.0));
 }
+
+/// `-c` (border and text) and `-s` (selection) used to set each other's
+/// color: `-c 00ff00ff` filled the selection green.
+#[test]
+fn border_and_selection_colors_go_to_the_right_style_fields() {
+    let mut args = cli(&["-c", "00ff00ff", "-s", "0000ffff"]);
+    let builder = format!(
+        "{:?}",
+        builder_from_args(&mut args, SelectionType::Area, None)
+    );
+    let green = "Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 }";
+    let blue = "Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 }";
+    assert!(
+        builder.contains(&format!("border_text_color: {green}")),
+        "{builder}"
+    );
+    assert!(
+        builder.contains(&format!("foreground_color: {blue}")),
+        "{builder}"
+    );
+}
