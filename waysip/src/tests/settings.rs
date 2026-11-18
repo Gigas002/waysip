@@ -160,3 +160,13 @@ fn canceled_selection_exits_with_failure() {
     assert_eq!(code, 1);
     assert_eq!(message, "Selection canceled");
 }
+
+/// A trailing blank line (`printf '...\n\n'`, or a here-doc) failed the
+/// whole list with "Invalid string format for Box ``".
+#[test]
+fn boxes_skip_blank_lines() {
+    let boxes = parse_boxes("100,100 400x200\n\n  \n700,300 300x500 label\n\n").unwrap();
+    assert_eq!(boxes.len(), 2);
+    assert_eq!(boxes[1].end_y, 800.0);
+    assert!(parse_boxes("100,100 400x200\nnot a box\n").is_err());
+}

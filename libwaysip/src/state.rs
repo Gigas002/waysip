@@ -694,10 +694,14 @@ pub struct BoxInfo {
 }
 
 impl BoxInfo {
+    /// Parses `x,y WIDTHxHEIGHT`, the format slurp reads from stdin. Like
+    /// slurp, anything after the size (a label, such as a window title) is
+    /// ignored, and so is surrounding whitespace.
     pub fn get_box_from_str(box_string: &str) -> Result<Self, BoxInfoError> {
-        let (coords, size) = box_string
-            .split_once(' ')
-            .ok_or(BoxInfoError::InvalidBoxString(box_string.to_string()))?;
+        let mut parts = box_string.split_whitespace();
+        let (Some(coords), Some(size)) = (parts.next(), parts.next()) else {
+            return Err(BoxInfoError::InvalidBoxString(box_string.to_string()));
+        };
         let (start_x, start_y) = coords
             .split_once(',')
             .ok_or(BoxInfoError::InvalidBoxCoordsString(coords.to_string()))?;

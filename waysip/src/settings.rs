@@ -197,12 +197,17 @@ pub(crate) fn read_boxes_from_stdin() -> Vec<BoxInfo> {
         std::process::exit(1);
     }
 
-    input_string
+    parse_boxes(&input_string).unwrap_or_else(|e| {
+        eprintln!("Err: {e}");
+        std::process::exit(1);
+    })
+}
+
+/// One box per line; blank lines (such as a trailing one) are skipped.
+pub(crate) fn parse_boxes(input: &str) -> Result<Vec<BoxInfo>, libwaysip::error::BoxInfoError> {
+    input
         .lines()
+        .filter(|line| !line.trim().is_empty())
         .map(BoxInfo::get_box_from_str)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_else(|e| {
-            eprintln!("Err: {e}");
-            std::process::exit(1);
-        })
+        .collect()
 }

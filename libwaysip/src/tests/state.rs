@@ -37,6 +37,18 @@ fn box_from_str_bad_number() {
     assert!(matches!(err, BoxInfoError::ParseFloatError(_)));
 }
 
+/// slurp's input format allows a label after the size (`swaymsg -t
+/// get_tree | jq ... | slurp` scripts emit window titles there); waysip
+/// failed on it with "invalid float literal".
+#[test]
+fn box_from_str_ignores_a_label_and_extra_whitespace() {
+    let b = BoxInfo::get_box_from_str("  10,20   100x50 Firefox — Mozilla  ").unwrap();
+    assert_eq!(
+        (b.start_x, b.start_y, b.end_x, b.end_y),
+        (10.0, 20.0, 110.0, 70.0)
+    );
+}
+
 // --- WaysipState selection-type predicates ---
 
 #[test]
