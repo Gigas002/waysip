@@ -776,8 +776,8 @@ impl AreaInfo {
 
     pub fn size_f(&self) -> Size<f64> {
         Size {
-            width: self.height_f64(),
-            height: self.width_f64(),
+            width: self.width_f64(),
+            height: self.height_f64(),
         }
     }
 

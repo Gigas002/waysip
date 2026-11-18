@@ -1088,3 +1088,19 @@ fn layer_surface_configure_creates_buffer_and_marks_inited() {
     assert!(state.wl_surfaces[0].buffer_busy);
     assert!(state.wl_surfaces[0].inited);
 }
+
+/// `AreaInfo::size_f` returned the height as the width and vice versa.
+#[test]
+fn area_size_f_matches_size() {
+    let conn = dummy_conn();
+    let mut state = base_state();
+    state
+        .wloutput_infos
+        .push(output_with_xdg_info(&conn, (0, 0), (1920, 1080)));
+    state.start_pos = Some(Position { x: 10.0, y: 20.0 });
+    state.end_pos = Some(Position { x: 310.5, y: 120.0 });
+    let info = state.area_info().unwrap();
+    let (size, size_f) = (info.size(), info.size_f());
+    assert_eq!((size.width, size.height), (300, 100));
+    assert_eq!((size_f.width, size_f.height), (300.5, 100.0));
+}
