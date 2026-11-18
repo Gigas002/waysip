@@ -211,10 +211,8 @@ impl LayerSurfaceInfo {
             for box_info in boxes {
                 let bstart_x = box_info.start_x - start_x as f64;
                 let bstart_y = box_info.start_y - start_y as f64;
-                let bend_x = box_info.end_x - start_x as f64;
-                let bend_y = box_info.end_x - start_y as f64;
-                let bwidth = bend_x - box_info.start_x;
-                let bheight = bend_y - box_info.start_y;
+                let bwidth = box_info.end_x - box_info.start_x;
+                let bheight = box_info.end_y - box_info.start_y;
                 cairoinfo.rectangle(bstart_x, bstart_y, bwidth, bheight);
                 cairoinfo.set_source_rgba(
                     self.style.box_color.r,

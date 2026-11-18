@@ -219,3 +219,54 @@ fn redraw_reuses_prev_selection_clip_on_second_call() {
         false,
     );
 }
+
+/// Reads one ARGB32 pixel back from the surface the info draws into.
+fn pixel(info: &LayerSurfaceInfo, x: usize, y: usize) -> u32 {
+    let surface = cairo::ImageSurface::try_from(info.cairo_t.target()).unwrap();
+    surface.flush();
+    let i = y * surface.stride() as usize + x * 4;
+    let mut px = 0;
+    surface
+        .with_data(|data| px = u32::from_ne_bytes(data[i..i + 4].try_into().unwrap()))
+        .unwrap();
+    px
+}
+
+/// Predefined boxes were drawn with the height `end_x - start_y` and the
+/// width measured from an output-relative edge to an absolute one, so a
+/// 40x20 box came out much taller (and wider on an output not at 0,0).
+#[test]
+fn predefined_boxes_are_drawn_at_their_size() {
+    let conn = dummy_conn();
+    let mut info = layer_surface_info(&conn);
+    let opaque = |r, g, b| Color { r, g, b, a: 1.0 };
+    info.style.background_color = opaque(0.0, 0.0, 1.0);
+    info.style.box_color = opaque(1.0, 0.0, 0.0);
+    // Output at (10,10); the box is 40x20 at (30,20) in layout coordinates,
+    // so (20,10)..(60,30) on the surface.
+    let boxes = vec![BoxInfo {
+        start_x: 30.0,
+        start_y: 20.0,
+        end_x: 70.0,
+        end_y: 40.0,
+    }];
+    let far = Position { x: 180.0, y: 180.0 };
+    info.redraw(
+        far,
+        far,
+        Position { x: 10, y: 10 },
+        Size {
+            width: 200,
+            height: 200,
+        },
+        false,
+        Some(&boxes),
+        true,
+        false,
+    );
+
+    let red = 0xffff0000;
+    assert_eq!(pixel(&info, 40, 20), red, "inside the box");
+    assert_ne!(pixel(&info, 40, 40), red, "below the box");
+    assert_ne!(pixel(&info, 70, 20), red, "right of the box");
+}
