@@ -147,6 +147,9 @@ impl Dispatch<wl_output::WlOutput, ()> for state::WaysipState {
             wl_output::Event::Mode { width, height, .. } => {
                 output.size = Size { width, height };
             }
+            wl_output::Event::Scale { factor } => {
+                output.scale = factor.max(1);
+            }
 
             _ => (),
         }

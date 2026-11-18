@@ -347,9 +347,13 @@ pub struct UiInit {
 }
 
 // initial bg
+/// Maps a `(width, height)` pixel buffer into `tmp` and paints the
+/// background. The context is scaled by `scale`, so callers draw in logical
+/// coordinates (`width / scale` by `height / scale`).
 pub fn draw_ui(
     tmp: &mut File,
     (width, height): (i32, i32),
+    scale: i32,
     background_color: crate::Color,
     frozen_bg: Option<&cairo::ImageSurface>,
 ) -> UiInit {
@@ -361,7 +365,15 @@ pub fn draw_ui(
     let surface =
         cairo::ImageSurface::create_for_data(mmmap, cairo_fmt, width, height, stride).unwrap();
     let cairoinfo = cairo::Context::new(&surface).unwrap();
-    paint_background(&cairoinfo, frozen_bg, background_color, width, height);
+    let scale = scale.max(1);
+    cairoinfo.scale(scale as f64, scale as f64);
+    paint_background(
+        &cairoinfo,
+        frozen_bg,
+        background_color,
+        width / scale,
+        height / scale,
+    );
     UiInit {
         context: cairoinfo,
         stride,

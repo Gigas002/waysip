@@ -49,13 +49,14 @@ fn layer_surface_info(conn: &Connection) -> LayerSurfaceInfo {
         font_desc_normal: std::cell::OnceCell::new(),
         prev_region: None,
         frozen_bg: None,
+        scale: 1,
     }
 }
 
 #[test]
 fn draw_ui_plain_background() {
     let mut file = tempfile::tempfile().unwrap();
-    let UiInit { stride, .. } = draw_ui(&mut file, (10, 10), sample_color(), None);
+    let UiInit { stride, .. } = draw_ui(&mut file, (10, 10), 1, sample_color(), None);
     assert!(stride >= 10 * 4);
 }
 
@@ -63,7 +64,7 @@ fn draw_ui_plain_background() {
 fn draw_ui_with_matching_frozen_background() {
     let mut file = tempfile::tempfile().unwrap();
     let frozen = cairo::ImageSurface::create(cairo::Format::ARgb32, 10, 10).unwrap();
-    let UiInit { stride, .. } = draw_ui(&mut file, (10, 10), sample_color(), Some(&frozen));
+    let UiInit { stride, .. } = draw_ui(&mut file, (10, 10), 1, sample_color(), Some(&frozen));
     assert!(stride >= 10 * 4);
 }
 
@@ -71,7 +72,7 @@ fn draw_ui_with_matching_frozen_background() {
 fn draw_ui_with_mismatched_frozen_background_scales() {
     let mut file = tempfile::tempfile().unwrap();
     let frozen = cairo::ImageSurface::create(cairo::Format::ARgb32, 5, 5).unwrap();
-    let UiInit { stride, .. } = draw_ui(&mut file, (20, 20), sample_color(), Some(&frozen));
+    let UiInit { stride, .. } = draw_ui(&mut file, (20, 20), 1, sample_color(), Some(&frozen));
     assert!(stride >= 20 * 4);
 }
 
@@ -401,4 +402,34 @@ fn label_is_only_on_the_output_with_the_corner() {
     );
     // Below the selection: the label would be pulled in here.
     assert_eq!(count_pixels(&info, [0, 104, 200, 200], |px| px != blue), 0);
+}
+
+/// At scale 2 the buffer has twice the pixels each way and drawing stays in
+/// logical coordinates: a 1x1 logical square covers 2x2 pixels.
+#[test]
+fn draw_ui_scales_drawing_to_the_buffer() {
+    let mut file = tempfile::tempfile().unwrap();
+    let UiInit { context, stride } = draw_ui(&mut file, (20, 20), 2, sample_color(), None);
+    assert!(stride >= 20 * 4);
+    context.set_operator(cairo::Operator::Source);
+    context.set_source_rgba(1.0, 0.0, 0.0, 1.0);
+    context.rectangle(5.0, 5.0, 1.0, 1.0);
+    context.fill().unwrap();
+
+    let surface = cairo::ImageSurface::try_from(context.target()).unwrap();
+    surface.flush();
+    assert_eq!((surface.width(), surface.height()), (20, 20));
+    let px = |x: usize, y: usize| {
+        let i = y * stride as usize + x * 4;
+        let mut v = 0;
+        surface
+            .with_data(|d| v = u32::from_ne_bytes(d[i..i + 4].try_into().unwrap()))
+            .unwrap();
+        v
+    };
+    for (x, y) in [(10, 10), (11, 11)] {
+        assert_eq!(px(x, y), 0xffff0000, "{x},{y}");
+    }
+    assert_ne!(px(12, 12), 0xffff0000);
+    assert_ne!(px(9, 9), 0xffff0000);
 }

@@ -9,19 +9,12 @@ mod utils;
 pub use utils::*;
 
 use error::WaySipError;
-use render::UiInit;
 pub use state::{AreaInfo, BoxInfo, SelectionType};
 use std::fmt;
-use std::os::unix::prelude::AsFd;
 use wayland_client::{
-    Connection,
+    Connection, Proxy,
     globals::registry_queue_init,
-    protocol::{
-        wl_compositor::WlCompositor,
-        wl_output::WlOutput,
-        wl_seat::WlSeat,
-        wl_shm::{self, WlShm},
-    },
+    protocol::{wl_compositor::WlCompositor, wl_output::WlOutput, wl_seat::WlSeat, wl_shm::WlShm},
 };
 use wayland_cursor::{CursorImageBuffer, CursorTheme};
 use wayland_protocols::{
@@ -337,6 +330,10 @@ fn get_area_inner(
         layer.set_exclusive_zone(-1);
         layer.set_keyboard_interactivity(zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive);
         layer.set_size(init_w as u32, init_h as u32);
+        // Draw at the output's resolution (HiDPI) instead of being scaled up.
+        if wmcompositer.version() >= 3 {
+            wl_surface.set_buffer_scale(wloutput.scale.max(1));
+        }
 
         wl_surface.commit(); // so during the init Configure of the shell, a buffer, at least a buffer is needed.
         // and if you need to reconfigure it, you need to commit the wl_surface again
@@ -346,23 +343,14 @@ fn get_area_inner(
             .as_ref()
             .and_then(|provider| provider(wloutput.get_output(), wloutput.get_name()));
 
-        let mut file = rustix::fs::memfd_create("waysip", rustix::fs::MemfdFlags::CLOEXEC)
-            .unwrap()
-            .into();
-        let UiInit {
-            context: cairo_t,
-            stride,
-        } = render::draw_ui(
-            &mut file,
+        let (buffer, cairo_t, stride) = state::create_overlay_buffer(
+            &shm,
+            &qh,
             (init_w, init_h),
+            wloutput.scale,
             style.background_color,
             frozen_bg.as_ref(),
         );
-        let pool = shm.create_pool(file.as_fd(), init_w * init_h * 4, &qh, ());
-
-        let buffer =
-            pool.create_buffer(0, init_w, init_h, stride, wl_shm::Format::Argb8888, &qh, ());
-        pool.destroy();
 
         let cursor_surface = wmcompositer.create_surface(&qh, ()); // and create a surface. if two or more,
         state.wl_surfaces.push(state::LayerSurfaceInfo {
@@ -381,6 +369,7 @@ fn get_area_inner(
             font_desc_normal: std::cell::OnceCell::new(),
             prev_region: None,
             frozen_bg,
+            scale: wloutput.scale.max(1),
         });
     }
     state.shm = Some(shm);

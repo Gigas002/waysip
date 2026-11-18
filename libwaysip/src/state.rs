@@ -103,6 +103,9 @@ pub struct WlOutputInfo {
     pub name: String,
     pub size: Size,
     pub xdg_output_info: OnceCell<ZXdgOutputInfo>,
+    /// The output's integer scale (`wl_output.scale`), 1 until the
+    /// compositor says otherwise.
+    pub scale: i32,
 }
 
 impl WlOutputInfo {
@@ -129,6 +132,7 @@ impl WlOutputInfo {
                 height: 0,
             },
             xdg_output_info: OnceCell::new(),
+            scale: 1,
         }
     }
     pub fn get_screen_info(&self) -> ScreenInfo {
@@ -340,31 +344,15 @@ impl WaysipState {
         if surface_info.buffer_busy {
             return;
         }
-        let mut file = rustix::fs::memfd_create("waysip", rustix::fs::MemfdFlags::CLOEXEC)
-            .unwrap()
-            .into();
         let qh = self.qh.as_ref().unwrap();
-        let width = width as i32;
-        let height = height as i32;
-        let UiInit {
-            context: cairo_t,
-            stride,
-        } = render::draw_ui(
-            &mut file,
-            (width, height),
+        let (buffer, cairo_t, _stride) = create_overlay_buffer(
+            self.shm.as_ref().unwrap(),
+            qh,
+            (width as i32, height as i32),
+            surface_info.scale,
             surface_info.style.background_color,
             surface_info.frozen_bg.as_ref(),
         );
-        let pool = self
-            .shm
-            .as_ref()
-            .unwrap()
-            .create_pool(file.as_fd(), width * height * 4, qh, ());
-
-        let buffer = pool.create_buffer(0, width, height, stride, wl_shm::Format::Argb8888, qh, ());
-        // The buffer keeps the pool's memory alive; the pool itself isn't
-        // needed any more.
-        pool.destroy();
 
         let old_buffer = std::mem::replace(&mut surface_info.buffer, buffer);
         let old_cairo_t = std::mem::replace(&mut surface_info.cairo_t, cairo_t);
@@ -728,6 +716,35 @@ impl WaysipState {
     }
 }
 
+/// Creates an overlay buffer for a surface of `logical` size on an output
+/// with integer `scale`: the buffer has `logical * scale` pixels, and the
+/// returned cairo context is scaled so drawing stays in logical
+/// coordinates. The caller sets the surface's buffer scale to `scale`.
+pub(crate) fn create_overlay_buffer(
+    shm: &WlShm,
+    qh: &QueueHandle<WaysipState>,
+    (width, height): (i32, i32),
+    scale: i32,
+    background: crate::Color,
+    frozen_bg: Option<&cairo::ImageSurface>,
+) -> (WlBuffer, cairo::Context, i32) {
+    let scale = scale.max(1);
+    let (pw, ph) = (width * scale, height * scale);
+    let mut file = rustix::fs::memfd_create("waysip", rustix::fs::MemfdFlags::CLOEXEC)
+        .unwrap()
+        .into();
+    let UiInit {
+        context: cairo_t,
+        stride,
+    } = render::draw_ui(&mut file, (pw, ph), scale, background, frozen_bg);
+    let pool = shm.create_pool(file.as_fd(), stride * ph, qh, ());
+    let buffer = pool.create_buffer(0, pw, ph, stride, wl_shm::Format::Argb8888, qh, ());
+    // The buffer keeps the pool's memory alive; the pool itself isn't
+    // needed any more.
+    pool.destroy();
+    (buffer, cairo_t, stride)
+}
+
 #[derive(Debug)]
 pub(crate) struct LayerSurfaceInfo {
     pub layer: ZwlrLayerSurfaceV1,
@@ -748,6 +765,9 @@ pub(crate) struct LayerSurfaceInfo {
     /// repainted on the next one so nothing stale is left behind.
     pub prev_region: Option<[f64; 4]>,
     pub frozen_bg: Option<cairo::ImageSurface>,
+    /// The output's integer scale; buffers have `scale` pixels per logical
+    /// pixel.
+    pub scale: i32,
 }
 
 /// coordinates of box

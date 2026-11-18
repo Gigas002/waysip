@@ -65,6 +65,7 @@ fn layer_surface_info(conn: &Connection) -> state::LayerSurfaceInfo {
         font_desc_normal: std::cell::OnceCell::new(),
         prev_region: None,
         frozen_bg: None,
+        scale: 1,
     }
 }
 
@@ -337,6 +338,31 @@ fn wl_output_mode_event_sets_size() {
 
     assert_eq!(state.wloutput_infos[0].size.width, 1920);
     assert_eq!(state.wloutput_infos[0].size.height, 1080);
+}
+
+/// The output scale was ignored, so on a scale-2 output the overlay was
+/// drawn at half resolution and stretched (blurry border and text).
+#[test]
+fn wl_output_scale_event_sets_scale() {
+    let conn = dummy_conn();
+    let qh = conn.new_event_queue::<WaysipState>().handle();
+    let wl_output: wl_output::WlOutput = inert(&conn);
+    let mut state = base_state();
+    state
+        .wloutput_infos
+        .push(state::WlOutputInfo::new(wl_output.clone()));
+    assert_eq!(state.wloutput_infos[0].scale, 1);
+
+    <WaysipState as Dispatch<wl_output::WlOutput, ()>>::event(
+        &mut state,
+        &wl_output,
+        wl_output::Event::Scale { factor: 2 },
+        &(),
+        &conn,
+        &qh,
+    );
+
+    assert_eq!(state.wloutput_infos[0].scale, 2);
 }
 
 // --- zxdg_output_v1 ---
