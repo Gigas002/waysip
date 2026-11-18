@@ -1039,14 +1039,18 @@ fn frame_callback_for_current_screen_triggers_redraw() {
     assert!(!state.redraw_all);
 }
 
+/// Only one frame callback is outstanding; when the pointer moved to
+/// another output meanwhile, it still has to redraw (and clear the flag),
+/// or drawing would stop.
 #[test]
-fn frame_callback_for_other_screen_is_ignored() {
+fn frame_callback_from_a_surface_left_since_still_redraws() {
     let conn = dummy_conn();
     let qh = conn.new_event_queue::<WaysipState>().handle();
     let callback: WlCallback = inert(&conn);
     let mut state = base_state();
     state.current_screen = 0;
     state.redraw_all = true;
+    state.frame_pending = true;
 
     <WaysipState as Dispatch<WlCallback, usize>>::event(
         &mut state,
@@ -1057,7 +1061,63 @@ fn frame_callback_for_other_screen_is_ignored() {
         &qh,
     );
 
-    assert!(state.redraw_all);
+    assert!(!state.redraw_all);
+    assert!(!state.frame_pending);
+}
+
+/// Every pointer motion used to request a frame callback on every surface,
+/// and every callback redrew: 1000 motions in a second gave 1000 redraws
+/// (125 with the 8 ms `frame-limit` throttle). Input now only asks for a
+/// frame when none is outstanding.
+#[test]
+fn input_requests_at_most_one_frame_at_a_time() {
+    let conn = dummy_conn();
+    let qh = conn.new_event_queue::<WaysipState>().handle();
+    let pointer: wl_pointer::WlPointer = inert(&conn);
+    let callback: WlCallback = inert(&conn);
+    let mut state = base_state();
+    state.qh = Some(qh.clone());
+    state
+        .wloutput_infos
+        .push(output_with_xdg_info(&conn, (0, 0), (1920, 1080)));
+    state.wl_surfaces.push(layer_surface_info(&conn));
+    state.start_pos = Some(Position { x: 0.0, y: 0.0 });
+
+    let motion = |state: &mut WaysipState, x: f64| {
+        <WaysipState as Dispatch<wl_pointer::WlPointer, ()>>::event(
+            state,
+            &pointer,
+            wl_pointer::Event::Motion {
+                time: 0,
+                surface_x: x,
+                surface_y: x,
+            },
+            &(),
+            &conn,
+            &qh,
+        );
+    };
+
+    motion(&mut state, 10.0);
+    assert!(state.frame_pending);
+    assert!(!state.try_commit(), "a frame is already outstanding");
+    motion(&mut state, 20.0);
+    motion(&mut state, 30.0);
+    assert!(!state.try_commit());
+
+    <WaysipState as Dispatch<WlCallback, usize>>::event(
+        &mut state,
+        &callback,
+        wl_callback::Event::Done { callback_data: 1 },
+        &0,
+        &conn,
+        &qh,
+    );
+    assert!(!state.frame_pending);
+    // The redraw used the latest position; the next input asks again.
+    assert_eq!(state.end_pos.unwrap().x, 30.0);
+    motion(&mut state, 40.0);
+    assert!(state.frame_pending);
 }
 
 // --- WlBuffer ---

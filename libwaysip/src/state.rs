@@ -218,8 +218,9 @@ pub struct WaysipState {
     pub(crate) qh: Option<QueueHandle<Self>>,
     pub(crate) predefined_boxes: Option<Vec<BoxInfo>>,
     pub(crate) aspect_ratio: Option<(f64, f64)>,
-    #[cfg(feature = "frame-limit")]
-    pub(crate) last_redraw: std::time::Instant,
+    /// Whether a frame callback is outstanding: input only updates the
+    /// state until it fires, then one redraw shows the latest state.
+    pub(crate) frame_pending: bool,
     #[cfg(feature = "benchmark")]
     pub(crate) bench: bool,
     #[cfg(feature = "benchmark")]
@@ -269,8 +270,7 @@ impl WaysipState {
             shm: None,
             predefined_boxes: None,
             aspect_ratio: None,
-            #[cfg(feature = "frame-limit")]
-            last_redraw: std::time::Instant::now() - std::time::Duration::from_secs(1),
+            frame_pending: false,
             #[cfg(feature = "benchmark")]
             bench: false,
             #[cfg(feature = "benchmark")]
@@ -614,23 +614,23 @@ impl WaysipState {
         }
     }
 
+    /// Asks for a redraw: requests a frame callback on the current
+    /// surface, unless one is already outstanding. The redraw happens when
+    /// it fires (see the `WlCallback` dispatch), so there is at most one per
+    /// frame of the compositor however fast input arrives, and it always
+    /// draws the latest state. Returns whether a callback was requested.
     pub(crate) fn try_commit(&mut self) -> bool {
-        #[cfg(feature = "frame-limit")]
-        {
-            let now = std::time::Instant::now();
-            if now.duration_since(self.last_redraw) >= std::time::Duration::from_millis(8) {
-                self.commit();
-                self.last_redraw = now;
-                return true;
-            }
-            false
+        if self.frame_pending {
+            return false;
         }
-
-        #[cfg(not(feature = "frame-limit"))]
-        {
-            self.commit();
-            true
-        }
+        let Some(surface) = self.wl_surfaces.get(self.current_screen) else {
+            return false;
+        };
+        let qh = self.qh.as_ref().unwrap();
+        surface.wl_surface.frame(qh, self.current_screen);
+        surface.wl_surface.commit();
+        self.frame_pending = true;
+        true
     }
 
     /// redraw all surface

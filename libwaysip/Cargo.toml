@@ -11,6 +11,8 @@ readme.workspace = true
 
 [features]
 default = ["frame-limit"]
+# No effect: redraws are paced by the compositor's frame callbacks. Kept so
+# builds that enable it keep working.
 frame-limit = []
 benchmark = []
 

@@ -505,9 +505,10 @@ impl Dispatch<WlCallback, usize> for state::WaysipState {
             callback_data: _callback_data,
         } = event
         {
-            if *screen_index != state.current_screen {
-                return;
-            }
+            // Only one callback is outstanding at a time (`try_commit`); it
+            // may come from a surface the pointer has left since.
+            let _ = screen_index;
+            state.frame_pending = false;
 
             #[cfg(feature = "benchmark")]
             if state.bench && state.timestamps_total.last().copied() != Some(_callback_data) {

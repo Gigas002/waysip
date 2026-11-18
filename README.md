@@ -89,7 +89,6 @@ waysip -d -e
 All features except `benchmark` and `freeze` are enabled in the default build. To reduce binary size or compile-time dependencies, features can be selectively disabled, or `freeze` can be opted into:
 
 ```bash
-cargo build --no-default-features --features frame-limiter
 cargo build --no-default-features --features logger
 cargo build --no-default-features --features completions
 cargo build --no-default-features --features frame-limit,logger,completions
@@ -98,7 +97,7 @@ cargo build --features freeze
 
 | Feature       | What it adds                                                                     | Extra dependency          |
 | ------------- | -------------------------------------------------------------------------------- | ------------------------- |
-| `frame-limit` | Workaround to fix frametime issue on low frequency CPUs                          | None                      |
+| `frame-limit` | No effect any more (redraws follow the compositor's frames); kept for builds    | None                      |
 | `logger`      | `--log-level` flag, tracing output to stderr                                     | tracing-subscriber        |
 | `completions` | `--completions <SHELL>`, generate shell completion scripts                       | clap_complete (+ nushell) |
 | `benchmark`   | Benchmarking options for development described [here](#development-benchmarking) | None                      |
@@ -145,7 +144,7 @@ cargo build --no-default-features --features "logger completions benchmark"
 cargo build --no-default-features --features "logger completions frame-limit benchmark"
 ```
 
-Regarding `frame-limit` feature. It is a workaround enabled by default meant to solve issue with unstable frametime on low freq CPUs or under heavy load.
+The `frame-limit` feature no longer changes anything: waysip keeps at most one frame callback outstanding and redraws when it fires, so it draws at most once per compositor frame, with the latest pointer position.
 
 ## Benchmark usage
 
@@ -162,7 +161,7 @@ Reported metrics (written to stderr):
 For drag modes the `raw duration` and the amount trimmed from each end are also printed.
 For non-drag options less frames-better.
 
-To test frametime stability try lowering your cpu freq to 0.8 GHz and build without frame-limit feature before testing.
+To test frametime stability try lowering your cpu freq to 0.8 GHz before testing.
 
 # Support:
 
